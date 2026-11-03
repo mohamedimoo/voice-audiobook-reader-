@@ -53,12 +53,17 @@ their chapters and covers, and remembers exactly where you stopped in each one.
 
 ## Install (Windows)
 
-Download the latest build from the **Actions** tab (artifact
-`voice-desktop-windows`) or from **Releases**:
+Download the latest build from the
+[**Releases** page](https://github.com/mohamedimoo/voice-audiobook-reader-/releases/latest):
 
+- `Voice Desktop-<version>-portable.exe`: double-click to run. Nothing to
+  install, so you can keep it anywhere, even on a USB stick.
 - `Voice Desktop-Setup-<version>.exe`: installer with Start Menu and desktop
   shortcuts.
-- `Voice Desktop-<version>-portable.exe`: runs without installing.
+
+Every push to the default branch rebuilds both files on a Windows machine
+(GitHub Actions) and updates that release. The files are also kept as the
+`voice-desktop-windows` artifact of each workflow run.
 
 The builds are not code-signed, so Windows SmartScreen may warn the first time
 you run them. Choose *More info → Run anyway*.
@@ -100,8 +105,8 @@ Other scripts:
 | `npm test` | Unit and integration tests (scanner tests need `ffmpeg` on the `PATH` and are skipped without it) |
 | `npm run icons` | Regenerates the PNG icons in `build/` (needs the `playwright` package) |
 
-Pushing a tag such as `v0.1.0` makes the GitHub Actions workflow build the
-Windows binaries and attach them to a GitHub release.
+To publish a new version, bump `version` in `package.json` and push. The
+workflow creates the matching `v<version>` release.
 
 ## How it works
 
