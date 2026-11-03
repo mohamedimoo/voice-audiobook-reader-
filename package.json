@@ -1,0 +1,87 @@
+{
+  "name": "voice-desktop",
+  "productName": "Voice Desktop",
+  "version": "0.1.0",
+  "description": "A minimal, distraction-free audiobook player for Windows, inspired by the Voice Android app.",
+  "main": "dist/main.js",
+  "license": "GPL-3.0-or-later",
+  "author": "Voice Desktop contributors",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "npm run build && electron .",
+    "typecheck": "tsc --noEmit",
+    "test": "node scripts/build.mjs --tests && node --test \"dist-test/*.test.js\"",
+    "icons": "node scripts/make-icons.mjs",
+    "dist:win": "node scripts/build.mjs --production && electron-builder --win --x64 --publish never",
+    "dist:win:portable": "node scripts/build.mjs --production && electron-builder --win portable --x64 --publish never"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.0",
+    "electron": "44.9.0",
+    "electron-builder": "26.17.0",
+    "esbuild": "0.28.2",
+    "music-metadata": "12.2.2",
+    "typescript": "5.9.3"
+  },
+  "build": {
+    "appId": "io.github.voicedesktop.app",
+    "productName": "Voice Desktop",
+    "copyright": "GPL-3.0-or-later",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "build/assets",
+        "to": "assets"
+      }
+    ],
+    "asar": true,
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Voice Desktop",
+      "artifactName": "${productName}-Setup-${version}.${ext}"
+    },
+    "fileAssociations": [
+      {
+        "ext": [
+          "m4b"
+        ],
+        "name": "Audiobook",
+        "description": "MPEG-4 audiobook",
+        "role": "Viewer"
+      }
+    ],
+    "portable": {
+      "artifactName": "${productName}-${version}-portable.${ext}"
+    },
+    "publish": null
+  }
+}
