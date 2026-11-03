@@ -1,7 +1,7 @@
 {
   "name": "voice-desktop",
   "productName": "Voice Desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A minimal, distraction-free audiobook player for Windows, inspired by the Voice Android app.",
   "main": "dist/main.js",
   "license": "GPL-3.0-or-later",

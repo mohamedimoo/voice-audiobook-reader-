@@ -64,4 +64,5 @@ if (tests) {
   for (const file of ['index.html', 'styles.css']) {
     await cp(path.join(root, 'src/renderer', file), path.join(root, 'dist/renderer', file));
   }
+  await cp(path.join(root, 'build/logo.svg'), path.join(root, 'dist/renderer/logo.svg'));
 }

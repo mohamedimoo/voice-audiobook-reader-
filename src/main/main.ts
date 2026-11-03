@@ -5,6 +5,7 @@ import {
   ipcMain,
   Menu,
   nativeImage,
+  nativeTheme,
   powerSaveBlocker,
   protocol,
   shell,
@@ -180,7 +181,7 @@ async function createWindow(windowStore: JsonStore<WindowState>) {
     show: false,
     title: 'Voice Desktop',
     icon: icon('icon.png'),
-    backgroundColor: settings.theme === 'light' ? '#f6f4f9' : '#16141c',
+    backgroundColor: settings.theme === 'dark' || (settings.theme === 'system' && nativeTheme.shouldUseDarkColors) ? '#0c111d' : '#f9fafb',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),

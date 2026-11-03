@@ -49,7 +49,7 @@ function stateOf(bookId: string): BookState {
 function saveState(bookId: string, patch: Partial<BookState>) {
   snap.states[bookId] = { ...stateOf(bookId), ...patch };
   void api.updateBookState(bookId, patch);
-  if (view === 'library' && ('completed' in patch || 'lastPlayedAt' in patch)) scheduleLibraryRender();
+  if ('completed' in patch || 'lastPlayedAt' in patch) scheduleLibraryRender();
 }
 
 async function updateSettings(patch: Partial<Settings>) {
@@ -67,6 +67,7 @@ function bookProgress(book: Book): number {
 }
 
 function isStarted(book: Book): boolean {
+  if (player.book?.id === book.id && player.bookPositionMs > 0 && !stateOf(book.id).completed) return true;
   const s = stateOf(book.id);
   return !s.completed && (s.positionMs > 0 || s.trackIndex > 0 || s.lastPlayedAt > 0);
 }
@@ -106,7 +107,7 @@ function coverEl(book: Book, className = ''): HTMLElement {
       'div',
       {
         class: 'cover-placeholder',
-        style: `background: linear-gradient(150deg, hsl(${hue} 45% 42%), hsl(${(hue + 40) % 360} 50% 22%))`,
+        style: `background: linear-gradient(145deg, hsl(${hue} 62% 62%), hsl(${(hue + 35) % 360} 55% 38%))`,
       },
       h('div', { class: 'ph-title' }, book.name),
       book.author ? h('div', { class: 'ph-author' }, book.author) : null,
@@ -319,20 +320,93 @@ function addMenu(anchor: HTMLElement) {
   );
 }
 
-// ==================================================================== top bar
+// ==================================================================== sidebar & top bar
+
+type Filter = 'all' | 'listening' | 'new' | 'finished';
+let filter: Filter = 'all';
+
+const FILTERS: { id: Filter; label: string; icon: IconName; matches: (b: Book) => boolean }[] = [
+  { id: 'all', label: 'Library', icon: 'library', matches: () => true },
+  { id: 'listening', label: 'Continue listening', icon: 'clock', matches: (b) => isStarted(b) },
+  { id: 'new', label: 'Not started', icon: 'sparkle', matches: (b) => !isStarted(b) && !stateOf(b.id).completed },
+  { id: 'finished', label: 'Finished', icon: 'checkCircle', matches: (b) => stateOf(b.id).completed },
+];
+
+const sidebar = $('#sidebar');
+const navList = h('nav', { class: 'nav' });
+const sidebarStatus = h('div', { class: 'sidebar-status' });
+const addButton: HTMLButtonElement = h(
+  'button',
+  { class: 'btn primary add-btn', title: 'Add books', onclick: () => addMenu(addButton) },
+  icon('add'),
+  h('span', { class: 'btn-label' }, 'Add books'),
+);
+
+function buildSidebar() {
+  replaceChildren(
+    sidebar,
+    h(
+      'div',
+      { class: 'brand' },
+      h('img', { class: 'brand-logo', src: 'logo.svg', alt: '', draggable: false }),
+      h('div', { class: 'brand-text' }, h('div', { class: 'brand-name' }, 'Voice'), h('div', { class: 'brand-sub' }, 'Audiobook player')),
+    ),
+    addButton,
+    h('div', { class: 'nav-label' }, 'Browse'),
+    navList,
+    h('div', { class: 'spacer' }),
+    sidebarStatus,
+    h(
+      'nav',
+      { class: 'nav' },
+      h('button', { class: 'nav-item', title: 'Rescan library', onclick: () => void api.rescan() }, icon('refresh'), h('span', { class: 'nav-text' }, 'Rescan library')),
+      h('button', { class: 'nav-item', title: 'Settings', onclick: openSettings }, icon('settings'), h('span', { class: 'nav-text' }, 'Settings')),
+    ),
+  );
+}
+
+function renderSidebar() {
+  replaceChildren(
+    navList,
+    FILTERS.map((f) => {
+      const count = snap.books.filter(f.matches).length;
+      return h(
+        'button',
+        {
+          class: `nav-item${view === 'library' && filter === f.id ? ' active' : ''}`,
+          title: f.label,
+          onclick: () => {
+            filter = f.id;
+            if (view !== 'library') showLibrary();
+            else renderLibrary();
+            renderSidebar();
+            renderTopbar();
+          },
+        },
+        icon(f.icon),
+        h('span', { class: 'nav-text' }, f.label),
+        count ? h('span', { class: 'nav-count' }, String(count)) : null,
+      );
+    }),
+  );
+  sidebarStatus.hidden = !snap.scanning;
+  replaceChildren(sidebarStatus, h('div', { class: 'spinner' }), h('span', null, scanText || 'Scanning library…'));
+}
 
 const topbar = $('#topbar');
+const pageTitle = h('h1', { class: 'page-title' });
+const pageSub = h('div', { class: 'page-sub' });
 const searchInput = h('input', {
   type: 'search',
-  placeholder: 'Search books and authors',
+  placeholder: 'Search',
   spellcheck: false,
   oninput: () => {
     search = searchInput.value.trim().toLowerCase();
     if (view !== 'library') showLibrary();
     renderLibrary();
+    renderTopbar();
   },
 });
-const scanIndicator = h('div', { class: 'scan-indicator', hidden: true });
 const sortSelect = h(
   'select',
   {
@@ -346,51 +420,43 @@ const sortSelect = h(
   h('option', { value: 'added' }, 'Recently added'),
   h('option', { value: 'progress' }, 'Progress'),
 );
-const layoutButton = h('button', {
-  class: 'icon-btn',
-  onclick: () =>
-    void updateSettings({ libraryLayout: snap.settings.libraryLayout === 'grid' ? 'list' : 'grid' }).then(() => {
-      renderTopbar();
-      renderLibrary();
-    }),
-});
-const addButton: HTMLButtonElement = h(
-  'button',
-  { class: 'btn primary', title: 'Add books', onclick: () => addMenu(addButton) },
-  icon('add'),
-  h('span', { class: 'btn-label' }, 'Add books'),
-);
+const gridButton = h('button', { class: 'seg-btn', title: 'Grid', onclick: () => setLayout('grid') }, icon('grid'));
+const listButton = h('button', { class: 'seg-btn', title: 'List', onclick: () => setLayout('list') }, icon('list'));
+
+function setLayout(layout: Settings['libraryLayout']) {
+  void updateSettings({ libraryLayout: layout }).then(() => {
+    renderTopbar();
+    renderLibrary();
+  });
+}
 
 function buildTopbar() {
   replaceChildren(
     topbar,
-    h(
-      'div',
-      { class: 'brand' },
-      h('div', { class: 'brand-mark' }, icon('headphones')),
-      h('span', { class: 'brand-name' }, 'Voice'),
-    ),
-    h('label', { class: 'search' }, icon('search'), searchInput),
-    scanIndicator,
+    h('div', { class: 'page-head' }, pageTitle, pageSub),
     h('div', { class: 'spacer' }),
+    h('label', { class: 'search' }, icon('search'), searchInput, h('kbd', { class: 'search-kbd' }, 'Ctrl F')),
     sortSelect,
-    layoutButton,
-    h('button', { class: 'icon-btn', title: 'Rescan library', onclick: () => void api.rescan() }, icon('refresh')),
-    h('button', { class: 'icon-btn', title: 'Settings', onclick: openSettings }, icon('settings')),
-    addButton,
+    h('div', { class: 'segmented', role: 'group', 'aria-label': 'Layout' }, gridButton, listButton),
   );
 }
 
 function renderTopbar() {
+  const current = FILTERS.find((f) => f.id === filter)!;
+  pageTitle.textContent = search ? 'Search' : current.label;
+  const count = search ? null : snap.books.filter(current.matches).length;
+  pageSub.textContent = search
+    ? `Results for “${searchInput.value.trim()}”`
+    : snap.books.length === 0
+      ? 'Add a folder to get started'
+      : `${count} book${count === 1 ? '' : 's'}`;
   sortSelect.value = snap.settings.librarySort ?? 'recent';
   const grid = snap.settings.libraryLayout !== 'list';
-  replaceChildren(layoutButton, icon(grid ? 'list' : 'grid'));
-  layoutButton.title = grid ? 'Show as list' : 'Show as grid';
+  gridButton.classList.toggle('active', grid);
+  listButton.classList.toggle('active', !grid);
   const hasBooks = snap.books.length > 0;
-  sortSelect.hidden = !hasBooks;
-  layoutButton.hidden = !hasBooks;
-  scanIndicator.hidden = !snap.scanning;
-  replaceChildren(scanIndicator, h('div', { class: 'spinner' }), scanText || 'Scanning library…');
+  for (const el of [sortSelect, gridButton.parentElement!, searchInput.parentElement!]) (el as HTMLElement).hidden = !hasBooks;
+  renderSidebar();
 }
 
 // ==================================================================== library view
@@ -402,7 +468,8 @@ function scheduleLibraryRender() {
   libraryRenderPending = true;
   requestAnimationFrame(() => {
     libraryRenderPending = false;
-    renderLibrary();
+    if (view === 'library') renderLibrary();
+    renderSidebar();
   });
 }
 
@@ -435,15 +502,18 @@ function renderLibrary() {
   const matches = search
     ? books.filter((b) => b.name.toLowerCase().includes(search) || (b.author ?? '').toLowerCase().includes(search))
     : books;
-  const sections: { title: string; books: Book[] }[] = [];
+  const sections: { title: string | null; books: Book[] }[] = [];
   if (search) {
-    sections.push({ title: 'Results', books: sortBooks(matches) });
+    sections.push({ title: null, books: sortBooks(matches) });
+  } else if (filter !== 'all') {
+    const f = FILTERS.find((x) => x.id === filter)!;
+    sections.push({ title: null, books: sortBooks(matches.filter(f.matches)) });
   } else {
     const current = matches.filter(isStarted);
     const completed = matches.filter((b) => stateOf(b.id).completed);
     const notStarted = matches.filter((b) => !isStarted(b) && !stateOf(b.id).completed);
     sections.push({ title: 'Continue listening', books: sortBooks(current) });
-    sections.push({ title: current.length ? 'Not started' : 'Your books', books: sortBooks(notStarted) });
+    sections.push({ title: current.length ? 'Not started' : 'All books', books: sortBooks(notStarted) });
     sections.push({ title: 'Finished', books: sortBooks(completed) });
   }
   const layout = snap.settings.libraryLayout === 'list' ? 'list' : 'grid';
@@ -456,11 +526,20 @@ function renderLibrary() {
         h(
           'section',
           null,
-          h('h2', { class: 'section-title' }, section.title, h('span', { class: 'count' }, String(section.books.length))),
+          section.title
+            ? h('h2', { class: 'section-title' }, section.title, h('span', { class: 'count' }, String(section.books.length)))
+            : null,
           h('div', { class: layout }, section.books.map((b) => (layout === 'grid' ? bookCard(b) : bookRow(b)))),
         ),
       ),
-    search && matches.length === 0 ? h('div', { class: 'panel-empty' }, `No books match “${searchInput.value}”.`) : null,
+    sections.every((sec) => sec.books.length === 0)
+      ? h(
+          'div',
+          { class: 'empty-filter' },
+          h('div', { class: 'empty-filter-icon' }, icon(search ? 'search' : FILTERS.find((f) => f.id === filter)!.icon)),
+          search ? `No books match “${searchInput.value.trim()}”.` : 'Nothing here yet.',
+        )
+      : null,
   );
   libraryView.scrollTop = scroll;
 }
@@ -473,7 +552,7 @@ function bookCard(book: Book): HTMLElement {
   if (progress > 0 && !state.completed) {
     cover.appendChild(h('div', { class: 'cover-progress' }, h('div', { style: `width:${progress * 100}%` })));
   }
-  if (state.completed) cover.appendChild(h('div', { class: 'completed-badge', title: 'Finished' }, icon('check')));
+  if (state.completed) cover.appendChild(h('div', { class: 'completed-badge', title: 'Finished' }, icon('check'), 'Done'));
   const badge = h(
     'span',
     {
@@ -497,8 +576,12 @@ function bookCard(book: Book): HTMLElement {
       oncontextmenu: (e: MouseEvent) => bookMenu(e, book),
     },
     cover,
-    h('div', null, h('div', { class: 'card-title' }, book.name), h('div', { class: 'card-sub' }, book.author ?? remainingText(book))),
-    book.author ? h('div', { class: 'card-sub', style: 'margin-top:-6px' }, remainingText(book)) : null,
+    h(
+      'div',
+      { class: 'card-meta' },
+      h('div', { class: 'card-title' }, book.name),
+      h('div', { class: 'card-sub' }, book.author ? `${book.author} · ${remainingText(book)}` : remainingText(book)),
+    ),
   );
 }
 
@@ -564,7 +647,7 @@ function emptyState(): HTMLElement {
   return h(
     'div',
     { class: 'empty' },
-    h('div', { class: 'empty-art' }, icon('headphones')),
+    h('div', { class: 'empty-art' }, h('img', { src: 'logo.svg', alt: '', draggable: false })),
     h('h1', null, 'Your library is empty'),
     h(
       'p',
@@ -645,7 +728,9 @@ function showPlayer() {
   view = 'player';
   closePopover();
   $('#library-view').hidden = true;
+  topbar.hidden = true;
   $('#player-view').hidden = false;
+  renderSidebar();
   renderMini();
   renderPlayer();
 }
@@ -655,7 +740,9 @@ function showLibrary() {
   panel = null;
   closePopover();
   $('#player-view').hidden = true;
+  topbar.hidden = false;
   $('#library-view').hidden = false;
+  renderSidebar();
   renderLibrary();
   renderMini();
 }
@@ -665,6 +752,7 @@ function showLibrary() {
 const playerView = $('#player-view');
 const ui = {
   headTitle: h('div', { class: 'head-title' }),
+  backdrop: h('div', { class: 'player-backdrop', 'aria-hidden': 'true' }),
   cover: h('div') as HTMLElement,
   author: h('div', { class: 'player-author' }),
   title: h('h1', { class: 'player-title' }),
@@ -734,6 +822,7 @@ function buildPlayerView() {
 
   replaceChildren(
     playerView,
+    ui.backdrop,
     h(
       'div',
       { class: 'player-head' },
@@ -785,13 +874,16 @@ let renderedCoverFor: string | null = null;
 function renderPlayer() {
   const book = player.book;
   if (!book || view !== 'player') return;
-  ui.headTitle.textContent = book.name;
+  ui.headTitle.textContent = 'Now playing';
   const coverKey = `${book.id}|${book.coverUrl}`;
   if (renderedCoverFor !== coverKey) {
     renderedCoverFor = coverKey;
     const cover = coverEl(book, 'player-cover');
     ui.cover.replaceWith(cover);
     ui.cover = cover;
+    ui.backdrop.style.backgroundImage = book.coverUrl ? `url("${book.coverUrl}")` : '';
+    ui.backdrop.style.setProperty('--hue', String(hashHue(book.name)));
+    ui.backdrop.classList.toggle('no-cover', !book.coverUrl);
   }
   ui.author.textContent = book.author ?? '';
   ui.author.hidden = !book.author;
@@ -810,7 +902,8 @@ function renderPlayer() {
   replaceChildren(ui.silence, icon('silence'), 'Skip silence');
   ui.boost.classList.toggle('active', player.gainDb > 0);
   replaceChildren(ui.boost, icon('volume'), player.gainDb > 0 ? `+${player.gainDb} dB` : 'Boost');
-  replaceChildren(ui.bookmark, icon('bookmarkAdd'), 'Bookmark');
+  replaceChildren(ui.bookmark, icon('bookmarkAdd'));
+  ui.bookmark.classList.add('icon-only');
   ui.error.hidden = !player.error;
   ui.error.textContent = player.error ?? '';
   renderSleepTool();
@@ -826,7 +919,7 @@ function renderSleepTool() {
       ? formatTime(player.sleepRemainingMs ?? 0)
       : sleep.kind === 'chapter'
         ? 'End of chapter'
-        : 'Sleep timer';
+        : 'Sleep';
   replaceChildren(ui.sleep, icon('sleep'), label);
 }
 
@@ -1496,7 +1589,7 @@ let lastReported = '';
 player.subscribe(() => {
   renderPlayer();
   renderMini();
-  if (view === 'library') scheduleLibraryRender();
+  scheduleLibraryRender();
   const book = player.book;
   const report = { bookId: book?.id ?? null, title: book?.name ?? null, playing: player.playing };
   const key = JSON.stringify(report);
@@ -1540,6 +1633,7 @@ function applySnapshot(next: LibrarySnapshot) {
 async function init() {
   snap = await api.getSnapshot();
   applyTheme();
+  buildSidebar();
   buildTopbar();
   buildPlayerView();
   buildMini();

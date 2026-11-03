@@ -1,6 +1,6 @@
 // Renders the app / tray / taskbar icons from SVG to PNG using Playwright's Chromium.
 // Run with `npm run icons` (requires the `playwright` package and a Chromium build).
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
@@ -9,23 +9,9 @@ const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-const HEADPHONES =
-  'M12 3a9 9 0 0 0-9 9v6a3 3 0 0 0 3 3h1a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5a7 7 0 0 1 14 0h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h1a3 3 0 0 0 3-3v-6a9 9 0 0 0-9-9Z';
-
-const appIcon = (size) => `
-<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 256 256">
-  <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#ffc66e"/>
-      <stop offset="1" stop-color="#e0703a"/>
-    </linearGradient>
-  </defs>
-  <rect x="8" y="8" width="240" height="240" rx="56" fill="url(#g)"/>
-  <g transform="translate(40 40) scale(7.333)" fill="#2a1c05"><path d="${HEADPHONES}"/></g>
-  <rect x="114" y="150" width="7" height="34" rx="3.5" fill="#2a1c05"/>
-  <rect x="125" y="140" width="7" height="54" rx="3.5" fill="#2a1c05"/>
-  <rect x="136" y="154" width="7" height="26" rx="3.5" fill="#2a1c05"/>
-</svg>`;
+// The app logo (build/logo.svg) is the source for the app, installer and tray icons.
+const LOGO = await readFile(path.join(root, 'build/logo.svg'), 'utf8');
+const appIcon = (size) => LOGO.replace(/width="48" height="48"/, `width="${size}" height="${size}"`);
 
 const glyph = (d, size = 32, color = '#ffffff') => `
 <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24"><path fill="${color}" d="${d}"/></svg>`;

@@ -103,7 +103,7 @@ Other scripts:
 | --- | --- |
 | `npm run typecheck` | Type-checks the whole project |
 | `npm test` | Unit and integration tests (scanner tests need `ffmpeg` on the `PATH` and are skipped without it) |
-| `npm run icons` | Regenerates the PNG icons in `build/` (needs the `playwright` package) |
+| `npm run icons` | Regenerates the app, tray and taskbar PNG icons from `build/logo.svg` (needs the `playwright` package) |
 
 To publish a new version, bump `version` in `package.json` and push. The
 workflow creates the matching `v<version>` release.
